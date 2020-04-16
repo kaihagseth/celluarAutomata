@@ -1,116 +1,101 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
+#include <chrono>
 #include <vector>
-#include <unistd.h>
+#include <math.h>
 
-class PixelBackEnd
-{
+class PixelBackEnd {
 public:
-	PixelBackEnd(int width, int height) :
-	width(width),
-	height(height),
-	data(width*height),
-	oldData(data),
-	stride(width)
-	{
-	}
-	
-	void set(int x, int y, bool value)
-	{
-		data[x*stride + y] = value;
-	}
+  PixelBackEnd(int width, int height)
+      : width(width), height(height), data(width * height), oldData(data) {}
 
-	bool get(int x, int y) const
-	{
-		return oldData[x*stride + y];
-	}	
+  void set(int x, int y, float value) { 
+    if (value > 1.0f)
+    {
+      value = 1.0f;
+    }
+    else if (value < 0.0f)
+    {
+      value = 0.0f;
+    }
+    data[x * width + y] = value; 
+  }
+  float get(int x, int y) const { return oldData[x * width + y]; }
 
-	bool step()
-	{
-		for (int i = 0; i < width; ++i)
-			for (int j = 0; j < height; ++j)
-			{
-				set(i, j, convOdd(i, j));
-			}
-		endStep();
-	}
+  void step() {
+    for (int i = 0; i < width; ++i)
+      for (int j = 0; j < height; ++j) {
+        set(i, j, convOdd(i, j));
+      }
+    endStep();
+  }
 
-	void endStep()
-	{
-		oldData = std::move(data);
-	}
+  void endStep() { oldData = data; }
 
-	inline int mod(int x, int m) const {
-	    int r = x%m;
-	    return r<0 ? r+m : r;
-	}
+  inline int mod(int x, int m) const {
+    int r = x % m;
+    return r < 0 ? r + m : r;
+  }
 
-	bool convOdd(int x, int y) const
-	{
-		bool result = false;
-		for (int i = -1; i <= 1; ++i)
-			for (int j = -1; j <= 1; ++j)
-			{
-				//if (abs(i) != abs(j)) continue;
-				if (!(i || j)) continue;
-				int xp = (x + i);
-				int yp = (y + j);
-				if (xp >= width) continue; 
-				if (yp >= height) continue; 
-				if (xp <= 0) continue; 
-				if (yp <= 0) continue; 
-				result = result ^ get(xp, yp);
-			}
-		return result;
-	}
-
+  float convOdd(int x, int y) const {
+    float result = 0.0f;
+    for (int i = -2; i <= 2; ++i) {
+      for (int j = -2; j <= 2; ++j) {
+        if (i == 0 && j == 0) continue; 
+        int xp = (x + i);
+        int yp = (y + j);
+        if (xp >= width || yp >= height || xp <= 0 || yp <= 0)
+          continue;
+        result += get(xp, yp) / 23.9f;
+      }
+    }
+    if (result > 1.0f)
+    {
+      result = 0.0f;
+    }
+    return result;
+  }
 
 private:
-	const int height;
-	const int width;
-	std::vector<uint_fast8_t> data;
-	std::vector<uint_fast8_t> oldData;
-	const int stride;
+  const int height;
+  const int width;
+  std::vector<float> data;
+  std::vector<float> oldData;
 };
 
-class Example : public olc::PixelGameEngine
-{
+class Example : public olc::PixelGameEngine {
 public:
-	Example():
-	scene(513, 513)
-	{
-		sAppName = "Example";
-		scene.set(256, 256, true);
-		scene.endStep();
-	}
+  Example() : scene(511, 511) {
+    sAppName = "Example";
+    scene.set(255, 255, 1.0f);
+    scene.endStep();
+  }
 
 public:
-	bool OnUserCreate() override
-	{
-		return true;
-	}
+  bool OnUserCreate() override { return true; }
 
-	bool OnUserUpdate(float fElapsedTime) override
-	{
-		for (int x = 0; x < ScreenWidth(); x++)
-			for (int y = 0; y < ScreenHeight(); y++)
-			{
-				if (scene.get(x,y))
-					Draw(x, y, olc::WHITE);
-				else
-					Draw(x, y, olc::BLACK);
-			}
-		scene.step();
-		return true;
-	}
+  bool OnUserUpdate(float fElapsedTime) override {
+    auto start = std::chrono::system_clock::now();
+    for (int x = 0; x < ScreenWidth(); x++)
+      for (int y = 0; y < ScreenHeight(); y++) {
+        uint32_t value = uint(scene.get(x, y) *255*255*255);
+        olc::Pixel pixel(value>>16, value>>8, value);
+        Draw(x, y, pixel);
+      }
+    scene.step();
+    auto end = std::chrono::system_clock::now();
+    auto diff = end - start;
+    std::cout << "Time to render frame was: " << fElapsedTime << std::endl;
+    return true;
+  }
+
 private:
-	PixelBackEnd scene;
+  PixelBackEnd scene;
 };
 
-int main()
-{
-	Example demo;
-	if (demo.Construct(513, 513, 4, 4))
-		demo.Start();
-	return 0;
+int main() {
+  Example demo;
+  if (demo.Construct(511, 511, 4, 4))
+    demo.Start();
+  return 0;
 }
