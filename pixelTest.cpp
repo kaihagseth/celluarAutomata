@@ -1,30 +1,31 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
 #include <chrono>
+#include <execution>
 #include <iostream>
 #include <math.h>
 #include <numeric>
 #include <vector>
-#include <execution>
 
-inline double distance(std::pair<double, double> from, std::pair<double, double> to)
-{
+inline double distance(std::pair<double, double> from,
+                       std::pair<double, double> to) {
   return sqrt(pow(from.first - to.first, 2) + pow(from.second - to.second, 2));
 }
 
 class Image {
 public:
   Image(const size_t width, const size_t height)
-      : width(width), height(height), data(width * height){};
+      : width(width), height(height), data(width * height), positions(makePositions()){};
 
   Image(const Image &other)
       : width(other.width), height(other.height),
         data(other.width * other.height) {
     data = other.data;
+    positions = other.positions;
   }
 
   Image(const size_t width, const size_t height, std::vector<float> &&inData)
-      : width(width), height(height) {
+      : width(width), height(height), positions(makePositions()) {
     if (data != inData) {
       data = inData;
     }
@@ -37,7 +38,7 @@ public:
 
   const Image operator/(const float divisor) const {
     Image out(width, height);
-    auto* outData = &out.data;
+    auto *outData = &out.data;
     const auto &inData = read();
     auto divide = [&divisor](float dividend) -> float {
       float result = dividend / divisor;
@@ -49,7 +50,7 @@ public:
 
   const Image operator*(const float factor) const {
     Image out(width, height);
-    auto* outData = &out.data;
+    auto *outData = &out.data;
     const auto &inData = read();
     std::transform(inData.begin(), inData.end(), outData->begin(),
                    [&factor](float f) -> float { return f * factor; });
@@ -67,14 +68,14 @@ public:
 
   struct Index {
     Index(size_t x, size_t y) : x(x), y(y){};
-    Index(): x(0), y(0) {};
+    Index() : x(0), y(0){};
     size_t x;
     size_t y;
 
     const Index operator+(const Index &other) const {
       return Index(x + other.x, y + other.y);
     }
-    
+
     const Index operator-(const Index &other) const {
       return Index(x - other.x, y - other.y);
     }
@@ -83,13 +84,11 @@ public:
       return Index(x / divisor, y / divisor);
     }
   };
-  const Index shape() const {
-    return Index(width, height);
-  }
+  const Index shape() const { return Index(width, height); }
 
   bool indexOutside(const Index i) const {
-    const size_t& x = i.x;
-    const size_t& y = i.y;
+    const size_t &x = i.x;
+    const size_t &y = i.y;
     if (x >= width || y >= height) {
       return true;
     }
@@ -111,36 +110,37 @@ public:
 
   float get(Index idx) const noexcept { return data[idx.x * width + idx.y]; }
 
-  const std::vector<Index> getPositions() const{
-    std::vector<Index> positions(width*height);
+  const std::vector<Index> makePositions() const {
+    std::vector<Index> v(width * height);
     size_t i = 0;
-    for (auto& position : positions){
-      position = getIndex(i++); 
+    for (auto &position : v) {
+      position = getIndex(i++);
     }
+    return v;
+  }
+  const std::vector<Index> getPositions() const {
     return positions;
-  }  
-  void setZero()
-  {
-    for (auto& pixel : data) {
-      pixel = M_PI/2.0f;
+
+  }
+  void setZero() {
+    for (auto &pixel : data) {
+      pixel = M_PI / 2.0f;
     }
   }
 
   static Image conv2d(const Image &input, const Image &filter) {
     Image result(input.width, input.height);
-    auto job = [&result, &input, &filter](auto pos){
-      result.set(pos, getConvPixel(input, pos, filter));
-    };
-    auto positions = input.getPositions();
-    std::for_each(std::execution::par, std::begin(positions), std::end(positions), [&](Index pos){
-      result.set(pos, getConvPixel(input, pos, filter));
-    });
+    const auto& inputPositions = input.getPositions();
+    std::for_each(
+        std::execution::par, std::begin(inputPositions), std::end(inputPositions),
+        [&](Index pos) { result.set(pos, getConvPixel(input, pos, filter)); });
     return result;
   }
 
 private:
   std::vector<float> data;
-  static float getConvPixel(const Image &input, const Image::Index& pos,
+  std::vector<Index> positions;
+  static float getConvPixel(const Image &input, const Image::Index &pos,
                             const Image &filter) {
     float result = 0.0f;
     size_t i = 0;
@@ -153,7 +153,7 @@ private:
       Index index(pos.x + xshift, yshift + pos.y);
       result += pixel * input.get(index);
     }
-    return fmod(result, M_PI_2*10);
+    return fmod(result, M_PI_2 * 10);
   }
 };
 
@@ -163,13 +163,9 @@ public:
       : image(width, height), filter(convSize, convSize){};
   void step() { image = Image::conv2d(image, filter); }
   float get(size_t x, size_t y) const { return image.get(Image::Index(x, y)); }
-  void setFilter(Image f) {
-    filter = f;
-  }
+  void setFilter(Image f) { filter = f; }
 
-  void setZero(){
-   image.setZero(); 
-  }
+  void setZero() { image.setZero(); }
 
   // Places a point with a given value in the middle of the canvas.
   void seed(float sum) {
@@ -224,11 +220,11 @@ Image normalize(const Image &filter) {
 
 Image circular(size_t size, float gain) {
   Image filter(size, size);
-  float center = 0; 
-  for (int x =  0; x < size; ++x) {
+  float center = 0;
+  for (int x = 0; x < size; ++x) {
     for (int y = 0; y < size; ++y) {
-      const int rx = x - size/2;
-      const int ry = y - size/2;
+      const int rx = x - size / 2;
+      const int ry = y - size / 2;
       float centerDistance = distance({center, center}, {rx, ry});
       filter.set(x, y, 1.0f / (1 + centerDistance));
     }
@@ -241,27 +237,35 @@ Image circular(size_t size, float gain) {
 
 class ConvolutionVisualizer : public olc::PixelGameEngine {
 public:
-  ConvolutionVisualizer(size_t sceneSize, size_t filterSize) : scene(sceneSize, sceneSize, filterSize) {
+  ConvolutionVisualizer(size_t sceneSize, size_t filterSize)
+      : scene(sceneSize, sceneSize, filterSize), positions(makePositions(sceneSize, sceneSize)) {
     sAppName = "ConvolutionVisualizer";
-    scene.seed(4.0f);
-    scene.setFilter(filters::circular(filterSize, 1.005f));
+    scene.seed(1.0f);
+    scene.setFilter(filters::circular(filterSize, 1.0f));
   }
+  struct Position {
+    Position(size_t a, size_t b){
+      x = a;
+      y = b;
+    }
+    size_t x;
+    size_t y;
+  };
 
 public:
   bool OnUserCreate() override {
-     scene.setZero();
-     return true; }
+    scene.setZero();
+    return true;
+  }
 
   bool OnUserUpdate(float fElapsedTime) override {
     auto start = std::chrono::system_clock::now();
-    for (int x = 0; x < ScreenWidth(); x++) {
-      for (int y = 0; y < ScreenHeight(); y++) {
-        const float value = scene.get(x, y);
-        olc::Pixel pixel =
-            olc::PixelF(0,0,sin(value) + 1.0f);
-        Draw(x, y, pixel);
-      }
-    }
+    std::for_each(std::execution::par, std::begin(positions),
+                  std::end(positions), [&](Position pos) {
+                    const float value = scene.get(pos.x, pos.y);
+                    olc::Pixel pixel = olc::PixelF(0, 0, sin(value) + 1.0f);
+                    Draw(pos.x, pos.y, pixel);
+                  });
     scene.step();
     auto end = std::chrono::system_clock::now();
     auto diff = std::chrono::duration<float>(end - start);
@@ -271,10 +275,20 @@ public:
 
 private:
   PixelBackEnd scene;
+  const std::vector<Position> positions;
+  const std::vector<Position> makePositions(size_t width, size_t height) {
+    std::vector<Position> v;
+    for (size_t x = 0; x < width; ++x) {
+      for (size_t y = 0; y < width; ++y) {
+        v.emplace_back(Position(x, y));
+      }
+    }
+    return v;
+  }
 };
 
 int main() {
-  size_t size = 411;
+  size_t size = 311;
   ConvolutionVisualizer demo(size, 7);
   if (demo.Construct(size, size, 4, 4))
     demo.Start();
