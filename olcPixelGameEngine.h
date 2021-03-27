@@ -128,7 +128,7 @@
 
 	Author
 	~~~~~~
-	David Barr, aka javidx9, ï¿½OneLoneCoder 2018, 2019, 2020
+	David Barr, aka javidx9, ©OneLoneCoder 2018, 2019, 2020
 */
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -245,7 +245,8 @@ int main()
 	#define OLC_GFX_OPENGL10
 #endif
 
-// O------------------------------------------------------------------------------O // | olcPixelGameEngine INTERFACE DECLARATION                                     |
+// O------------------------------------------------------------------------------O
+// | olcPixelGameEngine INTERFACE DECLARATION                                     |
 // O------------------------------------------------------------------------------O
 namespace olc
 {

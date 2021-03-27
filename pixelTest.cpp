@@ -8,59 +8,84 @@
 #include <numeric>
 #include <vector>
 
-inline double distance(std::pair<double, double> from,
-                       std::pair<double, double> to) {
+float MOUSE_ADD = 100.0;
+float MOUSE_MULT = 3;
+
+inline double distance(const std::pair<double, double> &from,
+                       const std::pair<double, double> &to) {
   return sqrt(pow(from.first - to.first, 2) + pow(from.second - to.second, 2));
 }
 
 class Image {
 public:
-  Image(const size_t width, const size_t height, bool isFilter=false)
-      : width(width), height(height), data(width * height),
-        positions(makePositions(isFilter)){};
+  Image(const size_t &width, const size_t &height, bool isFilter = false)
+      : width(width), height(height), data_(width * height),
+        positions_(makePositions(isFilter)){};
 
   Image(const Image &other)
       : width(other.width), height(other.height),
-        data(other.width * other.height) {
-    data = other.data;
-    positions = other.positions;
+        data_(other.width * other.height) {
+    data_ = other.data_;
+    positions_ = other.positions_;
   }
 
-  Image(const size_t width, const size_t height, std::vector<float> &&inData)
-      : width(width), height(height), positions(makePositions()) {
-    if (data != inData) {
-      data = inData;
-    }
+  Image(const size_t width, const size_t height,
+        std::vector<float> &&inData) noexcept
+      : width(width), height(height), positions_(makePositions()) {
+    data_ = std::move(inData);
   };
 
   Image &operator=(const Image &other) {
-    data = other.data;
+    data_ = other.data_;
     return *this;
   }
 
   const Image operator/(const float divisor) const {
     Image out(width, height);
-    auto *outData = &out.data;
+    auto &outData = out.data_;
     const auto &inData = read();
-    const auto divide = [&divisor](float dividend) -> float {
+    const auto divide = [&divisor](const float &dividend) -> float {
       float result = dividend / divisor;
       return result;
     };
-    std::transform(inData.begin(), inData.end(), outData->begin(), divide);
+    std::transform(inData.begin(), inData.end(), outData.begin(), divide);
     return out;
   }
 
-  const Image operator*(const float factor) const {
+  float average() {
+    auto sum = std::reduce(std::begin(data_), std::end(data_), 0.0f);
+    return sum / data_.size();
+  }
+
+  const Image operator*(const float &factor) const {
     Image out(width, height);
-    auto *outData = &out.data;
+    auto &outData = out.data_;
     const auto &inData = read();
-    std::transform(inData.begin(), inData.end(), outData->begin(),
+    std::transform(inData.begin(), inData.end(), std::begin(outData),
                    [&factor](float f) -> float { return f * factor; });
     return out;
   }
 
-  Image &operator=(const Image &&other) {
-    data = other.data;
+  const Image operator+(const float &factor) const {
+    Image out(width, height);
+    auto &outData = out.data_;
+    const auto &inData = read();
+    std::transform(inData.begin(), inData.end(), std::begin(outData),
+                   [&factor](float f) -> float { return f + factor; });
+    return out;
+  }
+
+  const Image operator-(const float &factor) const {
+    Image out(width, height);
+    auto &outData = out.data_;
+    const auto &inData = read();
+    std::transform(inData.begin(), inData.end(), std::begin(outData),
+                   [&factor](float f) -> float { return f - factor; });
+    return out;
+  }
+
+  Image &operator=(const Image &&other) noexcept {
+    data_ = std::move(other.data_);
     return *this;
   }
 
@@ -88,63 +113,78 @@ public:
   };
   const Index shape() const { return Index(width, height); }
 
-  bool indexOutside(const Index i) const {
+  bool indexOutside(const Index &i) const {
     const size_t &x = i.x;
     const size_t &y = i.y;
-    if (x >= width || y >= height) {
-      return true;
-    }
-    return false;
+    return (x >= width || y >= height);
   };
-  const std::vector<float> &read() const { return data; }
+
+  const std::vector<float> &read() const { return data_; }
 
   const Index getIndex(const uint i) const {
-    return Index(i % width, i / height);
+    return Index(i / width, i % height);
   }
 
-  void set(Index idx, float value) noexcept {
-    data[idx.x * width + idx.y] = value;
+  void set(const Index &idx, float value) noexcept {
+    data_[idx.x * width + idx.y] = value;
   }
 
   void set(size_t x, size_t y, float value) noexcept {
-    data[x * width + y] = value;
+    data_[x * width + y] = value;
   }
 
-  float get(Index idx) const noexcept { return data[idx.x * width + idx.y]; }
+  void add(size_t x, size_t y, float value) noexcept {
+    data_[x * width + y] +=  value;
+  }
 
-  const std::vector<Index> makePositions(bool relative=false) const {
+  void mult(size_t x, size_t y, float factor) noexcept {
+    data_[(x * width) + y] *=  factor;
+    //std::cout << "Setting " << x << ":" << y << " to: " << factor << "\n";
+    //std::cout << "abs: " <<  (x * width) + y << "\n";
+  }
+
+  [[nodiscard]] float get(const Index &idx) const noexcept {
+    return data_[idx.x * width + idx.y];
+  }
+
+  [[nodiscard]] float get(size_t x, size_t y) noexcept {
+    return data_[x * width + y];
+  }
+
+  const std::vector<Index> makePositions(bool relative = false) const {
     std::vector<Index> v(width * height);
     int i = 0;
     for (auto &position : v) {
       position = getIndex(i++);
       if (relative) {
-        position.x -= width/2;
-        position.y -= height/2;
+        position.x -= width / 2;
+        position.y -= height / 2;
       }
     }
     return v;
   }
-  const std::vector<Index> getPositions() const { return positions; }
+
+  const std::vector<Index> &getPositions() const { return positions_; }
   void setZero() {
-    for (auto &pixel : data) {
+    for (auto &pixel : data_) {
       pixel = 0.0f;
     }
   }
 
   static Image conv2d(const Image &input, const Image &filter) {
-    Image result(input.width, input.height);
-    auto *outData = &result.data;
+    Image result(input.height, input.width);
+    auto &outData = result.data_;
     const auto &inputPositions = input.getPositions();
     std::transform(
         std::execution::par, std::begin(inputPositions),
-        std::end(inputPositions), std::begin(*outData),
+        std::end(inputPositions), std::begin(outData),
         [&](auto pos) -> float { return getConvPixel(input, pos, filter); });
     return result;
   }
 
 private:
-  std::vector<float> data;
-  std::vector<Index> positions;
+  std::vector<float> data_;
+  std::vector<Index> positions_;
   static float getConvPixel(const Image &input, const Image::Index &pos,
                             const Image &filter) {
     std::vector<float> results(filter.read().size());
@@ -153,17 +193,18 @@ private:
     const int w = input.width;
     const int h = input.height;
     std::for_each(std::begin(positions), std::end(positions),
-                  [&pos, &w, &h](Index &index) { 
-                  index.x = (index.x + pos.x) % w;
-                  index.y = (index.y + pos.y) % h;
+                  [&pos, &w, &h](Index &index) {
+                    index.x = (index.x + pos.x) % w;
+                    index.y = (index.y + pos.y) % h;
                   });
     const auto beginnings = boost::make_zip_iterator(
         boost::make_tuple(std::begin(filterData), std::begin(positions)));
     const auto ends = boost::make_zip_iterator(
         boost::make_tuple(std::end(filterData), std::end(positions)));
     std::transform(beginnings, ends, std::begin(results),
-                   [&](const auto& valuePosPair) {
-                     return boost::get<0>(valuePosPair) * input.get(boost::get<1>(valuePosPair));
+                   [&](const auto &valuePosPair) {
+                     return boost::get<0>(valuePosPair) *
+                            input.get(boost::get<1>(valuePosPair));
                    });
     const auto result =
         std::reduce(std::begin(results), std::end(results), 0.0f);
@@ -179,6 +220,8 @@ public:
   float get(size_t x, size_t y) const { return image.get(Image::Index(x, y)); }
   void setFilter(Image f) { filter = f; }
   void setZero() { image.setZero(); }
+  void add(size_t x, size_t y) { image.add(x, y, MOUSE_ADD); }
+  void mult(size_t x, size_t y) { image.mult(x, y, MOUSE_MULT); }
 
   // Places a point with a given value in the middle of the canvas.
   void seed(float sum) {
@@ -217,11 +260,11 @@ std::ostream &operator<<(std::ostream &os, const Image &image) {
     ++counter;
     if (counter >= image.width) {
       counter = 0;
-      std::cout << std::endl;
     }
   }
   return os;
 }
+
 namespace filters {
 Image normalize(const Image &filter) {
   float sum = 0.0f;
@@ -243,6 +286,23 @@ Image circular(size_t size, float gain) {
   }
   filter = normalize(filter);
   return filter * gain;
+}
+
+Image ring(size_t size, float gain) {
+  Image filter(size, size);
+  float center = 0;
+  for (int x = 0; x < size; ++x) {
+    for (int y = 0; y < size; ++y) {
+      const int rx = x - size / 2;
+      const int ry = y - size / 2;
+      float centerDistance = distance({center, center}, {rx, ry});
+      auto magnitude = fabs(centerDistance - (size / 2));
+      filter.set(x, y, magnitude);
+    }
+  }
+  filter = normalize(filter);
+  filter = (filter - filter.average()) * 2;
+  return filter;
 }
 
 } // namespace filters
@@ -273,19 +333,30 @@ public:
 
   bool OnUserUpdate(float fElapsedTime) override {
     auto start = std::chrono::system_clock::now();
+    // std::for_each(std::execution::par, std::begin(positions),
+    //              std::end(positions), [&](Position pos) {
+    //                const float value = scene.get(pos.x, pos.y);
+    //                const auto r = (sin(value) + 1.0f) / 2.0f;
+    //                const auto g = (sin(value * 3.0f) + 1.0f) / 2.0f;
+    //                const auto b = (sin(value * 5.0f) + 1.0f) / 2.0f;
+    //                olc::Pixel pixel = olc::PixelF(r, g, b);
+    //                Draw(pos.x, pos.y, pixel);
+    //              });
     std::for_each(std::execution::par, std::begin(positions),
                   std::end(positions), [&](Position pos) {
-                    const float value = scene.get(pos.x, pos.y);
-                    const auto r = (sin(value) + 1.0f) / 2.0f;
-                    const auto g = (sin(value * 3.0f) + 1.0f) / 2.0f;
-                    const auto b = (sin(value * 5.0f) + 1.0f) / 2.0f;
-                    olc::Pixel pixel = olc::PixelF(r, g, b);
+                    const float value =
+                        (sin(scene.get(pos.x, pos.y)) + 1.0f) / 2.0f;
+                        olc::Pixel pixel = olc::PixelF(value, value, value);
                     Draw(pos.x, pos.y, pixel);
                   });
+    if (GetMouse(0).bHeld) {
+      scene.add(GetMouseX(), GetMouseY());
+      scene.mult(GetMouseX(), GetMouseY());
+    }
     scene.step();
     auto end = std::chrono::system_clock::now();
     auto diff = std::chrono::duration<float>(end - start);
-    std::cout << "FPS: " << 1.0f / diff.count() << std::endl;
+    // std::cout << "FPS: " << 1.0f / diff.count() << std::endl;
     return true;
   }
 
@@ -294,9 +365,10 @@ private:
   const std::vector<Position> positions;
   const std::vector<Position> makePositions(size_t width, size_t height) {
     std::vector<Position> v;
+    v.reserve(width * height);
     for (size_t x = 0; x < width; ++x) {
       for (size_t y = 0; y < width; ++y) {
-        v.emplace_back(Position(x, y));
+        v.emplace_back(x, y);
       }
     }
     return v;
@@ -304,8 +376,8 @@ private:
 };
 
 int main() {
-  size_t size = 511;
-  ConvolutionVisualizer demo(size, 5, 1.003f);
+  size_t size = 512;
+  ConvolutionVisualizer demo(size, 5, 0.9998);
   if (demo.Construct(size, size, 4, 4))
     demo.Start();
   return 0;
